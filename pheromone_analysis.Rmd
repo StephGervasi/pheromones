@@ -1,0 +1,35 @@
+---
+title: "pheromone_analysis"
+author: "StephG"
+date: "11/30/2018"
+output: html_document
+---
+
+# install packages and load libraries for analysis
+```{r}
+library(lme4) # for the linear mixed effects models that I will build
+library(lmerTest) # to estimate the p values associated with coefficients in the mixed models
+library(car) # Anova function to estimate X2 values of main effects in mixed models
+library(tidyverse) # to manipulate raw data file (including averaging/subsetting/mutating/renaming)
+library(effects) # to generate effects plots for investigation of interactions
+library(ggplot2) # for main figures to use in ms
+library(plyr) # to get averages across rows
+library(dplyr) # order matters here for dplyr functions
+```
+
+# get the data - it is in .csv file format
+```{r}
+urine_final_all <- read.csv("urine_final_all.csv")
+head(urine_final_all)
+str(urine_final_all)
+```
+
+# transform the data - want to average the early and late time points for 1 row per mouse at the "pre", "early", and "late" times.
+```{r}
+averaged_urine_final_all <- ddply(urine_final_all, .(MouseID, Treatment, Time), numcolwise(mean))
+View(averaged_urine_final_all)
+
+# save this in the project folder
+write.csv (x = as.data.frame(averaged_urine_final_all), file = "averaged_urine_final_all.csv")
+```
+
