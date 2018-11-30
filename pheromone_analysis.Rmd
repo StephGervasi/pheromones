@@ -15,7 +15,7 @@ library(effects) # to generate effects plots for investigation of interactions
 library(ggplot2) # for main figures to use in ms
 library(plyr) # to get averages across rows
 library(dplyr) # order matters here --- be sure to load dyplyr after plyr (but a warning will also be issued to remind you)
-library(lattice)
+library(lattice) # use this for the qqplots below, even though can use this in base, too
 ```
 
 # get the data - it is in .csv file format
@@ -112,8 +112,7 @@ HMH_lmer4 <- lmer(log(X1) ~ Treatment*Time + (1|MouseID), REML = TRUE, data = re
 summary(HMH_lmer4) # now it's possible to get the CORT vs. others comparisons
 Anova(HMH_lmer4) # again, this should remain the same as in the previous 3 models
 
-# you can see, again, that for the main effect of treatment, re-leveling does maintain the same estimate, t and p values *w/r/t* treatment, but not time. Again, I believe it is the interaction that is changing this, but will need to read more to ensure that this is what's going on, and that the estimates within the re-leveling terms (time OR treatment) are accurately calculated.
-
+##### Conclude: you can see, again, that for the main effect of treatment, re-leveling does maintain the same estimate, t and p values *w/r/t* treatment, but not time. Again, I believe it is the interaction that is changing this, but will need to read more to ensure that this is what's going on, and that the estimates within the re-leveling terms (time OR treatment) are accurately calculated.
 
 # finally, check the distribution of residuals from the HMH model. It will not matter which one, since they are all the same, aside from re-leveling.
 plot(HMH_lmer) # residual plot
@@ -141,6 +140,27 @@ anova(levene.model.hmh)
 Anova(levene.model.hmh)
 
 # the levene test is NS for mouse ID, NS for Time, but significant for treatment (suggesting non-equal variance)...
+
+```
+
+# supplementary analysis to check main effects for hmh
+```{r}
+# another way to assess the main effects in the hmh model is to drop terms sequentially and then make model comparisons. Make sure to switch REML to false.
+
+HMH_lmer_FALSE <- lmer(log(X1) ~ Treatment + Time + Treatment:Time + (1|MouseID), REML = FALSE, data = averaged_urine_final_all) 
+HMH_lmer_MAINS <- lmer(log(X1) ~ Treatment + Time + (1|MouseID), REML = FALSE, data = averaged_urine_final_all) 
+HMH_lmer_dropTRT <- lmer(log(X1) ~ Time + (1|MouseID), REML = FALSE, data = averaged_urine_final_all)
+HMH_lmer_dropTIME <- lmer(log(X1) ~ Treatment + (1|MouseID), REML = FALSE, data = averaged_urine_final_all)
+HMH_lmer_dropINT <- lmer(log(X1) ~ Treatment + Time + (1|MouseID), REML = FALSE, data = averaged_urine_final_all)
+
+anova(HMH_lmer_FALSE, HMH_lmer_dropINT) # for interaction effect
+anova(HMH_lmer_MAINS, HMH_lmer_dropTRT) # for time effect (without controlling for interaction)
+anova(HMH_lmer_MAINS, HMH_lmer_dropTIME) # for treatment effect (without controlling for interaction)
+
+```
+
+# visualization of DHB, chromatographic peak #37, response over treatment and time.
+```{r}
 
 ```
 
