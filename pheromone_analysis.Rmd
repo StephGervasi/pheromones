@@ -14,7 +14,8 @@ library(tidyverse) # to manipulate raw data file (including averaging/subsetting
 library(effects) # to generate effects plots for investigation of interactions
 library(ggplot2) # for main figures to use in ms
 library(plyr) # to get averages across rows
-library(dplyr) # order matters here for dplyr functions
+library(dplyr) # order matters here --- be sure to load dyplyr after plyr (but a warning will also be issued to remind you)
+library(lattice)
 ```
 
 # get the data - it is in .csv file format
@@ -31,5 +32,115 @@ View(averaged_urine_final_all)
 
 # save this in the project folder
 write.csv (x = as.data.frame(averaged_urine_final_all), file = "averaged_urine_final_all.csv")
+```
+
+# visualization of HMH, chromatographic peak 1, responses, across experimental treatments and time (categorical) or day (continuous).
+```{r}
+
+##### Visualize averaged HMH response with box plots inside of violin plots. Data are the *averaged* responses. #####
+
+dodge <- position_dodge(width = 1)
+
+HMH <- ggplot(data = averaged_urine_final_all, aes(x = Time, y = log(X1), fill = Treatment)) +
+  geom_violin(position = dodge, scale = "width") + scale_x_discrete(limits = c("pre", "early", "late")) +
+  geom_boxplot(width=.1, lwd = 0.5, fatten = 3, outlier.colour=NA, position = dodge) + theme_minimal()
+
+HMH <- HMH + theme(axis.title.x = element_blank(), axis.title.y = element_text(colour = "black", size = 14, face = "bold"), axis.text.x = element_text(colour = "black", size = 14, face = "bold"), axis.text.y = element_text(colour = "black", size = 14, face = "bold"), legend.text = element_text(colour = "black", size = 12, face = "bold"), legend.title = element_text(colour = "black", size = 14, face = "bold"))
+
+HMH <- HMH + theme (panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "black"))
+
+HMH <- HMH + labs(y = "Log10 Mean HMH Peak Response")
+
+HMH # check it
+ggsave(HMH, file = "log10HMHave.png", dpi = 700) # save it
+
+
+##### Visualize HMH response continuously, using the non-averaged data. Here, we have all animals represented once at the pre-experimental timepoint, twice at the early timepoint, and twice at the late timepoint. #####
+
+HMHpoint <- ggplot(urine_final_all,aes(x=Day,y=log(X1))) + geom_point() + geom_smooth(method="lm") + facet_grid(~Treatment)
+
+HMHpoint <- HMHpoint + theme(axis.title.x = element_blank(), axis.title.y = element_text(colour = "black", size = 14, face = "bold"), axis.text.x = element_text(colour = "black", size = 14, face = "bold"), axis.text.y = element_text(colour = "black", size = 14, face = "bold"))
+
+HMHpoint <- HMHpoint + labs(y = "Log10 HMH Peak Response") + theme_bw()
+
+HMHpoint <- HMHpoint + facet_grid(~Treatment) +
+  theme(strip.text.x = element_text(size=12, face = "bold"),
+        strip.text.y = element_text(size=12, face="bold"))
+
+HMHpoint <- HMHpoint + theme(axis.title.x = element_text(colour = "black", size = 14, face = "bold"), axis.title.y = element_text(colour = "black", size = 14, face = "bold"), axis.text.x = element_text(colour = "black", size = 10, face = "bold"), axis.text.y = element_text(colour = "black", size = 10, face = "bold"))
+
+HMHpoint # check it
+ggsave(HMHpoint, file = "log10HMHpoint.png", dpi = 700) # save it
+
+```
+
+# analysis of HMH response
+```{r}
+# have a suspicion that data are skewed - often a high frequency of very small chromatographic peak responses small and a smaller proportion of large peak responses. Maybe we can log transform the data to get a more normal shaped distribution of data points.
+
+qqp(averaged_urine_final_all$X1, "norm")
+qqp(averaged_urine_final_all$X1, "lnorm") 
+hist(averaged_urine_final_all$X1)
+hist(log(averaged_urine_final_all$X1))
+
+# proceed with linear mixed effects model - using mouse ID as a random effect since we have 3 time points per mouse represented in the analysis and the plots.
+
+HMH_lmer <- lmer(log(X1) ~ Treatment*Time + (1|MouseID), REML = TRUE, data = averaged_urine_final_all) # swich REML to false if you want to use 'anova' method to compare treatments/drop terms sequentially to estimate main effects.
+summary(HMH_lmer)
+Anova(HMH_lmer) 
+
+# this is great, but we might want to get the estimated p values from the t-tests using Satterhwaite's method (with lmerTest) for comparisons not included. we need to re-level time and treatment to get all of the possible pairwise comparisons. 
+
+# re-level time to make "pre" the reference level
+
+relevelTime <- within(averaged_urine_final_all, Time <- relevel(Time, ref = "pre"))
+HMH_lmer2 <- lmer(log(X1) ~ Treatment*Time + (1|MouseID), REML = TRUE, data = relevelTime)
+summary(HMH_lmer2) # now it's possible to get the pre versus late comparison
+Anova(HMH_lmer2) # this should be identical to the output from HMH_lmer, above
+
+# an interesting phenomenon occurs here with re-leveling, and it appears that it is completely due to the inclusion of an interaction term in the model (behavior is as expected with no interaction term). what happens, is that the estimates, t-values, and p values of the main treatment effects change with re-leveling. these should, in theory, remain unchanged when the re-leveling is applied only to time. if i re-level using Treatment + Time, instead, the main effects terms remain the same with re-leveling.
+
+# I also need to re-level for treatment, to get all of the pairwise interactions for the main effect of treatment (Control vs. CORT, CORT/LPS, and LPS is default; I need to re-level to get LPS vs. others and CORT vs. others.
+
+relevelTreatment1 <- within(averaged_urine_final_all, Treatment <- relevel(Treatment, ref = "LPS"))
+HMH_lmer3 <- lmer(log(X1) ~ Treatment*Time + (1|MouseID), REML = TRUE, data = relevelTreatment1)
+summary(HMH_lmer3) # now it's possible to get the LPS vs. others comparisons
+Anova(HMH_lmer3) # again, this should remain the same as in the previous 2 models
+
+relevelTreatment2 <- within(averaged_urine_final_all, Treatment <- relevel(Treatment, ref = "CORT"))
+HMH_lmer4 <- lmer(log(X1) ~ Treatment*Time + (1|MouseID), REML = TRUE, data = relevelTreatment2)
+summary(HMH_lmer4) # now it's possible to get the CORT vs. others comparisons
+Anova(HMH_lmer4) # again, this should remain the same as in the previous 3 models
+
+# you can see, again, that for the main effect of treatment, re-leveling does maintain the same estimate, t and p values *w/r/t* treatment, but not time. Again, I believe it is the interaction that is changing this, but will need to read more to ensure that this is what's going on, and that the estimates within the re-leveling terms (time OR treatment) are accurately calculated.
+
+
+# finally, check the distribution of residuals from the HMH model. It will not matter which one, since they are all the same, aside from re-leveling.
+plot(HMH_lmer) # residual plot
+hmh.residuals <- resid(HMH_lmer) # define residuals
+logX1 <- log(averaged_urine_final_all$X1)
+plot(hmh.residuals) # plot : notice axes differ from plot call above
+plot(hmh.residuals, logX1) # we want to see a linear response here 
+
+qqnorm(residuals(HMH_lmer))
+# or
+qqmath(HMH_lmer, id=0.05)
+# and
+hist(hmh.residuals, breaks = 5)
+hist(hmh.residuals, breaks = 20)
+
+# tests of normality of residuals and homogeneity of variance of residuals across time, treatment, and mice (ID).
+
+shapiro.test(hmh.residuals) # NS p value indicates no difference from normality
+
+absolute_residuals <- abs(hmh.residuals)
+abs2residuals <- absolute_residuals^2
+levene.model.hmh <- lm(abs2residuals ~ Time, data = averaged_urine_final_all) 
+summary(levene.model.hmh)
+anova(levene.model.hmh)
+Anova(levene.model.hmh)
+
+# the levene test is NS for mouse ID, NS for Time, but significant for treatment (suggesting non-equal variance)...
+
 ```
 
